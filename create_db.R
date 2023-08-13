@@ -38,6 +38,15 @@ timeseries <- read_rds("Let_BotScl_TS.rds") %>%
 # ss_timeseries <- dplyr::filter(timeseries,
 #                                Fungi =='Scl')
 
+scl_divset_corr.DEGs_filtered <- readxl::read_excel("G:/Shared drives/Denby Lab Team Drive/Paper writing/Lettuce QTL paper/Supplemental Datasets/Supp_Dataset5_lesion_corr.xlsx",sheet = 3, skip = 1)
+
+scl_divset_corr.signif <- readxl::read_excel("G:/Shared drives/Denby Lab Team Drive/Paper writing/Lettuce QTL paper/Supplemental Datasets/Supp_Dataset5_lesion_corr.xlsx",sheet = 1, skip = 1) %>%
+  mutate(confounding_DE = ifelse(!(GeneID %in% scl_divset_corr.DEGs_filtered$GeneID) , TRUE, FALSE)) %>%
+  select(GeneID, sclero_lesion_cor = Lesion_cor, sclero_lesion_cor_padj = p_adj, confounding_DE)
+
+
+
+
 grn.path <- "G:/Shared drives/Denby Lab Team Drive/Paper writing/Lettuce Botrytis time series paper/Analysis/Host/Botrytis-Scelrotinia-combo/OutPredict_GRNs"
 edges <- read_csv(file.path(grn.path,"high_confidence_edges.csv"))
 hubs <- read_csv(file.path(grn.path,"TF_outdegrees.csv"))
@@ -76,6 +85,7 @@ dbWriteTable(con, "divset_pheno", divset_pheno,overwrite=TRUE)
 dbWriteTable(con, "bot_divset_expr", divset_expr_Bot,overwrite=TRUE)
 dbWriteTable(con, "sclero_divset_expr", divset_expr_Scl,overwrite=TRUE)
 dbWriteTable(con, "timeseries", timeseries,overwrite=TRUE)
+dbWriteTable(con, "sclero_divset_corr", scl_divset_corr.signif,overwrite=TRUE)
 dbWriteTable(con, "grn_edges", edges,overwrite=TRUE)
 dbWriteTable(con, "grn_hubs", hubs,overwrite=TRUE)
 dbWriteTable(con, 'timeseries_overlap_degs',degs_tofde,overwrite=TRUE)
