@@ -11,36 +11,15 @@ get_pred_regulators<- function(GeneIDs = NULL,
                                At_orthologs = NULL,
                                GO_id = NULL,
                                protein_domain = NULL,
+                               return_edges=FALSE,
                                n_TFs = 5,
                                min_subset_targets = 5,
-                               order_by_column = "FoldEnrichment"){ # Or any other column name you'd like){
-  inputs <- c(!is.null(GeneIDs),
-              !is.null(At_orthologs),
-              !is.null(GO_id),
-              !is.null(protein_domain))
+                               order_by_column = "FoldEnrichment"){
 
-  if(sum(inputs)!=1){return(NULL)}
+  genes <- get_lettuce_genes_from_inputs(GeneIDs, At_orthologs,
+                                         GO_id, protein_domain)
 
-
-  if(inputs[1]){
-    target_query = get_genes_query(GeneIDs)
-  }else if(inputs[2]){
-    lettuce_orthologs <- get_orthologs(arabidopsis_genes = At_orthologs)
-    target_query = get_genes_query(lettuce_orthologs$GeneID)
-  }else if(inputs[3]){
-    go_genes <- get_GO_genes(GO_id,ts_degs_only = TRUE,include_gene_names = FALSE)
-    target_query <- get_genes_query(go_genes$GeneID)
-  }else if(inputs[4]){
-    if(grepl('PF\\d+|PTHR\\d+', protein_domain)){
-      domain_genes = get_genes_w_domain(domain_id = protein_domain,include_gene_name = FALSE,ts_degs_only = TRUE)
-    }else{
-      domain_genes = get_genes_w_domain(domain_desc = protein_domain,include_gene_name = FALSE,ts_degs_only = TRUE)
-    }
-
-    target_query = get_genes_query(domain_genes$GeneID)
-  }else{
-    return(data.frame())
-  }
+  target_query <- get_genes_query(gene)
 
 
   if(is.null(target_query)){
@@ -48,9 +27,48 @@ get_pred_regulators<- function(GeneIDs = NULL,
   }
 
 
+  if(return_edges){
+    query <- paste0(
+      # Create a CTE to subset the edges first based on target_query
+      "WITH SubsetEdges AS (",
+      "SELECT TF, Target, Importance ",
+      "FROM grn_edges ",
+      "WHERE Target IN ", target_query, "),",
 
+      # Identify the top TFs based on SumImportance
+      "TopTFs AS (",
+      "SELECT TF ",
+      "FROM SubsetEdges ",
+      "GROUP BY TF ",
+      "ORDER BY SUM(Importance) DESC LIMIT ", n_TFs, "),",
 
+      # Fetch names for TFs and Targets
+      "TFNames AS (",
+      "SELECT GeneID, ",
+      "CASE ",
+      "WHEN (At_ShortName IS NULL OR At_ShortName LIKE 'AT%G%') THEN GeneID ",
+      "ELSE 'Ls' || At_ShortName ",
+      "END AS TFName ",
+      "FROM gene_annotations WHERE GeneID IN (SELECT DISTINCT TF FROM SubsetEdges)), ",
 
+      "TargetNames AS (",
+      "SELECT GeneID, ",
+      "CASE ",
+      "WHEN (At_ShortName IS NULL OR At_ShortName LIKE 'AT%G%') THEN GeneID ",
+      "ELSE 'Ls' || At_ShortName ",
+      "END AS TargetName ",
+      "FROM gene_annotations WHERE GeneID IN (SELECT DISTINCT Target FROM SubsetEdges))",
+
+      # Main query to fetch the required columns and join with the names CTEs
+      "SELECT e.TF, t1.TFName, e.Target, t2.TargetName, ROUND(CAST(e.Importance AS FLOAT), 2) AS Importance ",
+      "FROM SubsetEdges e ",
+      "JOIN TopTFs top ON e.TF = top.TF ",
+      "JOIN TFNames t1 ON e.TF = t1.GeneID ",
+      "JOIN TargetNames t2 ON e.Target = t2.GeneID ",
+      "ORDER BY e.Importance DESC;"
+    )
+
+  }else{
 
   query <- paste0(
     # Create a CTE (Common Table Expression) to get all unique targets from grn_edges
@@ -107,7 +125,8 @@ get_pred_regulators<- function(GeneIDs = NULL,
     "GROUP BY s.TF, n.TFName, s.TotalOutdegrees, s.SubsetOutdegrees, e.ExpectedValue ",
     # Sort results based on a specified order column (dynamically provided)
     "ORDER BY ", order_by_column, " DESC LIMIT ", n_TFs, ";"
-  )
+    )
+  }
 
   df <- db_query(query)
 
@@ -118,8 +137,8 @@ get_pred_regulators<- function(GeneIDs = NULL,
 }
 
 #
-# get_pred_regulators(At_orthologs = c('NSL1','NSL2','RBOHD'),
-#                     min_subset_targets = 2)
+get_pred_regulators(At_orthologs = c('NSL1','NSL2','RBOHD'),
+                    min_subset_targets = 2,return_edges = TRUE)
 
 
 

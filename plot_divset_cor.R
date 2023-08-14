@@ -15,7 +15,10 @@ divset_pheno <- db_query("SELECT sample_name, sqrt_lesion FROM divset_pheno") %>
 
 
 
-plot_divset_cor <- function(genes,
+plot_divset_cor <- function(GeneIDs = NULL,
+                            At_orthologs = NULL,
+                            GO_id = NULL,
+                            protein_domain = NULL,
                             top_n_by_lesion_cor= NULL,
                             signif_cor_only = FALSE,
                             signif_cor_DEGs_filtered_only = FALSE,
@@ -23,8 +26,19 @@ plot_divset_cor <- function(genes,
                             single_panel = TRUE,
                             facet_scales = 'free_x',
                             facet_rows = NULL,
-                            label_pos = c(0.05,1),
+                            facet_title_size=11,
+                            label_pos = c(0.05,0.9),
                             return_heatmap = TRUE){
+
+
+
+  genes <- get_lettuce_genes_from_inputs(GeneIDs, At_orthologs,
+                                         GO_id, protein_domain)
+
+  if(length(genes)<1){return(ggplot())}
+
+
+
 
 
   ##if 8 or under genes, plot a scatterplot
@@ -37,9 +51,13 @@ plot_divset_cor <- function(genes,
                                 signif_cor_only = signif_cor_only,
                                 signif_cor_DEGs_filtered_only = signif_cor_DEGs_filtered_only,
                                 return_long = FALSE)
+
+    print(unique(genes_exp$GeneID))
+
     genes_exp <- genes_exp %>%
       merge(get_gene_names(genes_exp$GeneID),by='GeneID') %>%
       column_to_rownames('name')
+
 
 
 
@@ -65,7 +83,7 @@ plot_divset_cor <- function(genes,
     heatmap <- pheatmap(select(genes_exp,all_of(rownames(sample_annot))),
                         cluster_cols = F,
                         cluster_rows = T,
-                        fontsize_row=8,
+                        fontsize_row=facet_title_size*0.725,
                         color=colorRampPalette(c("navy", "white", "red"))(50),
                         scale = 'row',
                         annotation_col = sample_annot,
@@ -90,13 +108,13 @@ plot_divset_cor <- function(genes,
     df2plot <- merge(genes_exp, get_gene_names(genes_exp$GeneID),
                      by = 'GeneID')%>%
       merge(divset_pheno, by=c('accession','biorep','fungi'),all.x=T) %>%
-      mutate(pathogen = fungi %>% str_replace('Bot','*B. cinerea*') %>%
-               str_replace('Scl','*S. sclerotiorum*'))
+      mutate(pathogen = fungi %>% str_replace('Bot','B. cinerea') %>%
+               str_replace('Scl','S. sclerotiorum'))
 
     if(is.null(facet_rows)){facet_rows <- length(fungi)}
     #make plot
     if(single_panel) {
-      y_max <- round(max(df2plot$log2Exp))+(n_genes*0.175)
+      y_max <- round(max(df2plot$log2Exp))+(n_genes*0.14)
       print(head(df2plot))
       p <- ggplot(df2plot,
                   aes(x = sqrt_lesion,
@@ -113,22 +131,33 @@ plot_divset_cor <- function(genes,
 
     p <- p+
       labs(x = 'Sqrt Lesion Size (mm)', y = 'log2 expression') +
-      geom_point() +
+      geom_point(alpha=0.) +
       geom_smooth(method = 'lm', formula = 'y ~ x') +
       ggpubr::stat_cor(aes(label = after_stat(r.label)),
                        method = 'spearman',
                        label.x.npc = label_pos[1],
                        label.y.npc = label_pos[2],
-                       size = ifelse(single_panel, 4, 5-(0.3*n_genes)),
+                       size = ifelse(!single_panel, 5.2, 5-(0.3*n_genes)),
                        show.legend = FALSE)+
       theme_bw()+
-      theme(strip.text = ggtext::element_markdown(size=11),
+      theme(strip.text = ggtext::element_textbox( size = facet_title_size,
+                                                  face='italic',
+                                                  color = "black",
+                                                  fill = "grey92",
+                                                  box.color = "grey92",
+                                                  halign = 0.5,
+                                                  linetype = 1,
+                                                  r = unit(5, "pt"),
+                                                  width = unit(1, "npc"),
+                                                  padding = margin(0.4, 0, 1, 0),
+                                                  margin = margin(0.2,0.2,0.2,0.2)),
+            strip.background = element_blank(),
             panel.grid.minor = element_blank(),
             axis.title = element_text(size=11.5))
 
     return(p)
 }
 
-GOid <- 'GO:0004672'
-GO <- get_GO_genes(GOid,include_gene_names=FALSE)
-plot_divset_cor(genes = GO$GeneID, top_n_by_lesion_cor = 7, fungi = 'sclero', return_heatmap = FALSE,single_panel = FALSE,facet_rows = 2)
+# GOid <- 'GO:0004672'
+plot_divset_cor(GO_id = 'GO:0004672', top_n_by_lesion_cor = 5,
+                fungi = 'sclero', return_heatmap = FALSE,single_panel = FALSE)

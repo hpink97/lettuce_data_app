@@ -111,7 +111,8 @@ get_timeseries_exp <- function(genes = c('Lsat_1_v5_gn_3_121961', 'Lsat_1_v5_gn_
                                include_raw_points = TRUE,
                                include_mock = TRUE,
                                include_conf_intervals = TRUE,
-                               ts_DEGs_only = FALSE
+                               ts_DEGs_only = FALSE,
+                               up_down_only = 'both'
 ) {
   # Process fungi names and filter allowed ones
   fungi = tolower(fungi) %>% gsub(' ', '', .) %>% gsub('\\.|_', '', .)
@@ -128,9 +129,12 @@ get_timeseries_exp <- function(genes = c('Lsat_1_v5_gn_3_121961', 'Lsat_1_v5_gn_
   # Construct the SQL query based on input parameters
   SELECT <- paste0("SELECT GeneID, Fungi, Treatment, hpi, ",
                    ifelse(include_raw_points, "rep1_log2 as rep1, rep2_log2 as rep2, rep3_log2 as rep3, ", ""),
-                   "(rep1_log2 + rep2_log2 + rep3_log2) / 3 AS mean_expr")
+                   "(COALESCE(rep1_log2, 0) + COALESCE(rep2_log2, 0) + COALESCE(rep3_log2, 0)) /
+                   (CASE WHEN rep1_log2 IS NOT NULL THEN 1 ELSE 0 END +
+                   CASE WHEN rep2_log2 IS NOT NULL THEN 1 ELSE 0 END +
+                   CASE WHEN rep3_log2 IS NOT NULL THEN 1 ELSE 0 END) AS mean_expr")
 
-  WHERE <- paste0("WHERE GeneID IN ", genes_query)
+  WHERE <- paste0(" WHERE GeneID IN ", genes_query)
   if (!include_mock) {
     WHERE <- paste0(WHERE, " AND Treatment = 'Infected'")
   }
@@ -138,10 +142,16 @@ get_timeseries_exp <- function(genes = c('Lsat_1_v5_gn_3_121961', 'Lsat_1_v5_gn_
     WHERE <- paste0(WHERE, " AND Fungi = '", fungi, "'")
   }
   if (ts_DEGs_only) {
-    WHERE <- paste0(WHERE, " AND GeneID IN (SELECT GeneID FROM timeseries_overlap_degs)")
+    up_down_only <- tolower(trimws(up_down_only))
+    if(up_down_only %in% c('up','down')){
+      subquery_where <- paste0(" WHERE Bot_Inf_De_Dir = '",up_down_only,"' ")
+    }else{
+      subquery_where <- ""
+    }
+    WHERE <- paste0(WHERE, " AND GeneID IN (SELECT GeneID FROM timeseries_overlap_degs",subquery_where,")")
   }
 
-  my_query <- paste0(SELECT, " FROM timeseries ", WHERE)
+  my_query <- paste0(SELECT, " FROM timeseries", WHERE)
 
   # Execute the SQL query and return data frame
   exp <- db_query(my_query)
@@ -157,12 +167,38 @@ get_timeseries_exp <- function(genes = c('Lsat_1_v5_gn_3_121961', 'Lsat_1_v5_gn_
 }
 
 
+GO_descrip_2_ID <- function(description) {
+  description <- tolower(trimws(description))
+  res <- AnnotationDbi::select(GO.db::GO.db,
+                               keys=description,
+                               keytype="TERM",
+                               columns=c("GOID"))
+  return(res$GOID[1])
+}
+
+
 # Function to retrieve lettuce genes associated with a given Gene Ontology (GO) term
 get_GO_genes <- function(go_id = 'GO:0009723',
                          subset_lettuce_ids = NULL,
                          ts_degs_only = FALSE,
                          include_gene_names =TRUE
 ) {
+
+  # Check if the input is a GO ID or a description using regex
+  is_go_id <- grepl("^GO:\\d{7}$", go_id)
+
+  # If it's a description, get its GO ID
+  if (!is_go_id) {
+    go_id <- GO_descrip_2_ID(go_id)
+
+    # Handle invalid descriptions (i.e., when the returned GO ID is NULL or has no rows)
+    if (!grepl("^GO:\\d{7}$", go_id)) {
+      stop("Invalid GO description provided.")
+    }
+  }
+
+
+
   # Retrieve AGI codes associated with the GO term from the TAIR database
   At_genes_w_GO <- AnnotationDbi::select(org.At.tair.db::org.At.tair.db,
                                          keys = go_id,
@@ -296,6 +332,27 @@ get_orthologs <- function(arabidopsis_genes,
   return(Ls_orthologs)
 }
 
+get_lettuce_genes_from_inputs <- function(GeneIDs, At_orthologs, GO_id, protein_domain) {
+  if (!is.null(GeneIDs)) {
+    lettuce_genes <- GeneIDs[grepl('Lsat_1_v5_gn_\\d_\\d+',GeneIDs)]
+    return(GeneIDs)
+  } else if (!is.null(At_orthologs)) {
+    return(get_orthologs(arabidopsis_genes = At_orthologs)$GeneID)
+  } else if (!is.null(GO_id)) {
+    return(get_GO_genes(GO_id, ts_degs_only = FALSE, include_gene_names = FALSE)$GeneID)
+  } else if (!is.null(protein_domain)) {
+    if (grepl('PF\\d+|PTHR\\d+', protein_domain)) {
+      return(get_genes_w_domain(domain_id = protein_domain,
+                                include_gene_name = FALSE, ts_degs_only = FALSE)$GeneID)
+    } else {
+      return(get_genes_w_domain(domain_desc = protein_domain,
+                                include_gene_name = FALSE, ts_degs_only = FALSE)$GeneID)
+    }
+  } else {
+    return(NULL)
+  }
+}
+
 get_gene_names <- function(geneids, allow_dups = FALSE){
   #if no names provided, automatically generate them from annotations file
   gene_df <- db_query(paste0("SELECT GeneID,
@@ -304,7 +361,7 @@ get_gene_names <- function(geneids, allow_dups = FALSE){
     ELSE 'Ls' || At_ShortName
   END AS name
   FROM gene_annotations WHERE GeneID IN ",
-                             get_genes_query(geneids)))
+                             get_genes_query(unique(geneids))))
 
   if(allow_dups){
     return(gene_df)
