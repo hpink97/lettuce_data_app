@@ -141,8 +141,8 @@ get_timeseries_exp <- function(genes = c('Lsat_1_v5_gn_3_121961', 'Lsat_1_v5_gn_
   if (length(fungi) == 1) {
     WHERE <- paste0(WHERE, " AND Fungi = '", fungi, "'")
   }
-  if (ts_DEGs_only) {
-    up_down_only <- tolower(trimws(up_down_only))
+  up_down_only <- tolower(trimws(up_down_only))
+  if (ts_DEGs_only|up_down_only %in% c('up','down')) {
     if(up_down_only %in% c('up','down')){
       subquery_where <- paste0(" WHERE Bot_Inf_De_Dir = '",up_down_only,"' ")
     }else{
@@ -152,6 +152,8 @@ get_timeseries_exp <- function(genes = c('Lsat_1_v5_gn_3_121961', 'Lsat_1_v5_gn_
   }
 
   my_query <- paste0(SELECT, " FROM timeseries", WHERE)
+
+  print(my_query)
 
   # Execute the SQL query and return data frame
   exp <- db_query(my_query)

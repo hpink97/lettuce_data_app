@@ -64,7 +64,8 @@ plot_divset_cor <- function(GeneIDs = NULL,
 
 
 
-    sample_annot <- divset_pheno[divset_pheno$sample_name %in% colnames(genes_exp),c(1,4,5)] %>%
+    sample_annot_raw <- divset_pheno[divset_pheno$sample_name %in% colnames(genes_exp),c(1,4,5)]
+    sample_annot <- sample_annot_raw %>%
       remove_rownames() %>%
       column_to_rownames('sample_name')
 
@@ -91,7 +92,9 @@ plot_divset_cor <- function(GeneIDs = NULL,
                         border = NA)
 
 
-    return(heatmap)
+    return(list(plot=heatmap,
+                exp_data = genes_exp,
+                lesion_data = divset_pheno))
 
   }
     # Merge the two data frames
@@ -99,14 +102,14 @@ plot_divset_cor <- function(GeneIDs = NULL,
                                 fungi = fungi,
                                 top_n_by_lesion_cor= top_n_by_lesion_cor,
                                 signif_cor_only = signif_cor_only,
-                                signif_cor_DEGs_filtered_only = signif_cor_DEGs_filtered_only)
+                                signif_cor_DEGs_filtered_only = signif_cor_DEGs_filtered_only) %>%
+      merge(get_gene_names(genes_exp$GeneID), by = 'GeneID')
 
 
     n_genes <- length(unique(genes_exp$GeneID))
 
 
-    df2plot <- merge(genes_exp, get_gene_names(genes_exp$GeneID),
-                     by = 'GeneID')%>%
+    df2plot <- genes_exp %>%
       merge(divset_pheno, by=c('accession','biorep','fungi'),all.x=T) %>%
       mutate(pathogen = fungi %>% str_replace('Bot','B. cinerea') %>%
                str_replace('Scl','S. sclerotiorum'))
@@ -131,7 +134,7 @@ plot_divset_cor <- function(GeneIDs = NULL,
 
     p <- p+
       labs(x = 'Sqrt Lesion Size (mm)', y = 'log2 expression') +
-      geom_point(alpha=0.) +
+      geom_point(alpha=0.5) +
       geom_smooth(method = 'lm', formula = 'y ~ x') +
       ggpubr::stat_cor(aes(label = after_stat(r.label)),
                        method = 'spearman',
@@ -155,9 +158,14 @@ plot_divset_cor <- function(GeneIDs = NULL,
             panel.grid.minor = element_blank(),
             axis.title = element_text(size=11.5))
 
-    return(p)
+
+    print('plotted diversity set lesion correlation')
+
+    return(list(plot=p,
+                exp_data = genes_exp,
+                lesion_data = divset_pheno))
 }
 
-# GOid <- 'GO:0004672'
-plot_divset_cor(GO_id = 'GO:0004672', top_n_by_lesion_cor = 5,
-                fungi = 'sclero', return_heatmap = FALSE,single_panel = FALSE)
+# # GOid <- 'GO:0004672'
+# plot_divset_cor(GO_id = 'GO:0004672', top_n_by_lesion_cor = 5,
+#                 fungi = 'sclero', return_heatmap = FALSE,single_panel = FALSE)

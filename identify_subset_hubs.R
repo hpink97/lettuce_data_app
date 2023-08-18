@@ -19,7 +19,7 @@ get_pred_regulators<- function(GeneIDs = NULL,
   genes <- get_lettuce_genes_from_inputs(GeneIDs, At_orthologs,
                                          GO_id, protein_domain)
 
-  target_query <- get_genes_query(gene)
+  target_query <- get_genes_query(genes)
 
 
   if(is.null(target_query)){
@@ -60,7 +60,7 @@ get_pred_regulators<- function(GeneIDs = NULL,
       "FROM gene_annotations WHERE GeneID IN (SELECT DISTINCT Target FROM SubsetEdges))",
 
       # Main query to fetch the required columns and join with the names CTEs
-      "SELECT e.TF, t1.TFName, e.Target, t2.TargetName, ROUND(CAST(e.Importance AS FLOAT), 2) AS Importance ",
+      "SELECT e.TF, t1.TFName, e.Target, t2.TargetName, ROUND(CAST(e.Importance AS FLOAT), 4) AS Importance ",
       "FROM SubsetEdges e ",
       "JOIN TopTFs top ON e.TF = top.TF ",
       "JOIN TFNames t1 ON e.TF = t1.GeneID ",
@@ -136,9 +136,9 @@ get_pred_regulators<- function(GeneIDs = NULL,
 
 }
 
-#
-get_pred_regulators(At_orthologs = c('NSL1','NSL2','RBOHD'),
-                    min_subset_targets = 2,return_edges = TRUE)
+# #
+# get_pred_regulators(At_orthologs = c('NSL1','NSL2','RBOHD'),
+#                     min_subset_targets = 2,return_edges = TRUE)
 
 
 
