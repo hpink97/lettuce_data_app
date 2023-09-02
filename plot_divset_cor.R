@@ -2,7 +2,7 @@ library(tidyverse)
 
 
 if(!'helperFuncsLoaded' %in% ls()){
-  funcs_path <- "G:/Shared drives/Denby Lab Team Drive/Lab members/Harry/lettuce_data_shiny_app/plotting_funcs/helper_funcs.R"
+  funcs_path <- "plotting_funcs/helper_funcs.R"
   source(funcs_path)
 }
 
@@ -19,9 +19,9 @@ plot_divset_cor <- function(GeneIDs = NULL,
                             At_orthologs = NULL,
                             GO_id = NULL,
                             protein_domain = NULL,
-                            top_n_by_lesion_cor= NULL,
+                            top_n_by_lesion_cor= 1e6,
                             signif_cor_only = FALSE,
-                            signif_cor_DEGs_filtered_only = FALSE,
+                            DEGs_filtered= TRUE,
                             fungi = c("Scl"),
                             single_panel = TRUE,
                             facet_scales = 'free_x',
@@ -49,7 +49,7 @@ plot_divset_cor <- function(GeneIDs = NULL,
                                 fungi = fungi,
                                 top_n_by_lesion_cor= top_n_by_lesion_cor,
                                 signif_cor_only = signif_cor_only,
-                                signif_cor_DEGs_filtered_only = signif_cor_DEGs_filtered_only,
+                                DEGs_filtered= DEGs_filtered,
                                 return_long = FALSE)
 
     print(unique(genes_exp$GeneID))

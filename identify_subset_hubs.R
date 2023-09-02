@@ -2,7 +2,7 @@ library(tidyverse)
 
 
 if(!'helperFuncsLoaded' %in% ls()){
-  funcs_path <- "G:/Shared drives/Denby Lab Team Drive/Lab members/Harry/lettuce_data_shiny_app/plotting_funcs/helper_funcs.R"
+  funcs_path <- "plotting_funcs/helper_funcs.R"
   source(funcs_path)
 }
 

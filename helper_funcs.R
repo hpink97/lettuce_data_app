@@ -3,11 +3,11 @@
 library(tidyverse)
 
 # Set the path to the Shiny app directory
-app_path <- 'G:/Shared drives/Denby Lab Team Drive/Lab members/Harry/lettuce_data_shiny_app/'
+#app_path <- 'G:/Shared drives/Denby Lab Team Drive/Lab members/Harry/lettuce_data_shiny_app/'
 
 # Source the file containing the database connection functions
-source(file.path(app_path, 'sql_db/db_connect.R'))
-
+#source(file.path(app_path, 'sql_db/db_connect.R'))
+#source('sql_db/db_connect.R')
 
 # Define vectors of allowed fungi identifiers
 allowed_bot <- c('bot', 'botrytis', 'b.cinerea', 'bc', 'bcin')
@@ -32,15 +32,21 @@ get_genes_query <- function(input_genes) {
 
 # Function to retrieve expression data from the database for a given set of genes and fungi
 get_divset_exp <- function(genes = c('Lsat_1_v5_gn_5_78841', 'Lsat_1_v5_gn_9_69201', 'Lsat_1_v5_gn_1_56161'),
-                           top_n_by_lesion_cor= NULL,
+                           top_n_by_lesion_cor= 1e6,
                            signif_cor_only = FALSE,
-                           signif_cor_DEGs_filtered_only = FALSE,
+                           DEGs_filtered= TRUE,
                            fungi = c('Bc', 'Ss'),
                            return_long = TRUE
 ) {
   # Process fungi names and filter allowed ones
   fungi = tolower(fungi) %>% gsub(' ', '', .) %>% gsub('\\.|_', '', .)
   fungi <- fungi[fungi %in% allowed_fungi]
+
+
+  if(top_n_by_lesion_cor>length(unique(genes))){
+    top_n_by_lesion_cor <- NULL
+  }
+
 
 
   genes_query <- get_genes_query(genes)
@@ -50,15 +56,22 @@ get_divset_exp <- function(genes = c('Lsat_1_v5_gn_5_78841', 'Lsat_1_v5_gn_9_692
   }
 
   WHERE <- paste0('WHERE GeneID IN ',genes_query)
-  if(signif_cor_only ){#& !signif_cor_DEGs_filtered_only & is.null(abs_lesion_cor_thresh)){
-    WHERE <- paste0(WHERE,"AND GeneID IN (SELECT GeneID FROM sclero_divset_corr)")
-  }else if(top_n_by_lesion_cor){
+  if(!is.null(top_n_by_lesion_cor)){
     WHERE <- paste0("WHERE GeneID IN (SELECT GeneID FROM sclero_divset_corr " ,
-                    "WHERE confounding_DE=0 AND GeneID IN ",genes_query,
+                    "WHERE ",
+                    ifelse(DEGs_filtered,"confounding_DE=0 AND ",""),
+                    "GeneID IN ",genes_query,
                     "ORDER BY ABS(sclero_lesion_cor) DESC LIMIT ",top_n_by_lesion_cor, ")")
-  }else if(signif_cor_DEGs_filtered_only){
+  }else if(signif_cor_only & !DEGs_filtered ){#& !signif_cor_DEGs_filtered_only & is.null(abs_lesion_cor_thresh)){
+    WHERE <- paste0(WHERE,"AND GeneID IN (SELECT GeneID FROM sclero_divset_corr)")
+  }else if(signif_cor_only & DEGs_filtered){
     WHERE <- paste0(WHERE,"AND GeneID IN (SELECT GeneID FROM sclero_divset_corr WHERE confounding_DE=0)")
+  }else if(!signif_cor_only & DEGs_filtered){
+    WHERE <- paste0(WHERE,"AND GeneID NOT IN (SELECT GeneID FROM sclero_divset_corr WHERE confounding_DE=1)")
   }
+
+
+
 
 
 

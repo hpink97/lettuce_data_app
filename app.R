@@ -5,12 +5,12 @@ library(DT)
 
 rm(list=ls())
 
-funcs_path <- "G:/Shared drives/Denby Lab Team Drive/Lab members/Harry/lettuce_data_shiny_app/"
-source(file.path(funcs_path, 'sql_db/db_connect.R'))
-source(file.path(funcs_path, 'plotting_funcs/helper_funcs.R'))
-source(file.path(funcs_path, 'plotting_funcs/plot_divset_cor.R'))
-source(file.path(funcs_path, 'plotting_funcs/identify_subset_hubs.R'))
-source(file.path(funcs_path, 'plotting_funcs/plot_timeseries_expr.R'))
+
+source('sql_db/db_connect.R')
+source('plotting_funcs/helper_funcs.R')
+source('plotting_funcs/plot_divset_cor.R')
+source('plotting_funcs/identify_subset_hubs.R')
+source('plotting_funcs/plot_timeseries_expr.R')
 
 troubleshoot_prints <- FALSE
 
@@ -22,7 +22,7 @@ ui <- fluidPage(
   sidebarLayout(
     sidebarPanel(
       selectInput("experiment", "Choose an Experiment",
-                  choices = c("Lesion Size Correlation", "Time-Series Expression", "Gene Regulatory Network Analysis"),
+                  choices = c( "Time-Series Expression", "Gene Regulatory Network Analysis","Lesion Size Correlation"),
                   selected = "Time-Series Expression"),
 
       selectInput("geneSelectionMethod", "Gene selection method",
@@ -45,10 +45,47 @@ ui <- fluidPage(
       # Display information if button is not clicked
       conditionalPanel(
         condition = "input.btn_generate == 0",
-        tags$h3("Welcome to Lettuce Data Explorer!"),
-        tags$p("This application allows you to perform integrated analyses on Lettuce data."),
-        tags$p("Start by selecting an experiment and the gene selection method. You can then enter the specific genes or criteria you are interested in and adjust any additional filters or settings. Once you are ready, click the 'Generate Results' button to view the corresponding plots and data tables.")
-      ),
+
+        tags$div(style = "font-size: 18px; line-height: 1.6;",   # This applies the styling to the entire div content
+
+                 tags$h3("Welcome to Lettuce Data Explorer!"),
+                 tags$p("This tool simplifies the exploration of our lettuce transcriptomic datasets. Quickly find lettuce genes using Arabidopsis symbols/IDs, GO terms, or protein domains, allowing you to focus on your genes of interest."),
+
+                 tags$h4("Instructions:"),
+
+                 tags$ul(
+                   tags$li("Select an experiment to analyse Lettuce data:",
+
+                           tags$ul(
+                             tags$li(
+                               strong("Time-series expression:"),
+                               "Monitor lettuce gene responses to ", HTML("<i>Botrytis cinerea</i>"), " and ", HTML("<i>Sclerotinia sclerotioruim</i>"), ". View gene expression profiles."
+                             ),
+                             tags$li(
+                               strong("Gene Regulatory Network Analysis:"),
+                               "Explore transcriptional shifts during necrotrophic infections. View regulators or edges for selected genes."
+                             ),
+                             tags$li(
+                               strong("Lesion Size Correlation:"),
+                               "Examine gene expression's correlation with susceptibility (lesion size) to pathogens."
+                             )
+                           )),
+
+                   tags$li("Choose a gene selection method:",
+                           tags$ul(
+                             tags$li("Lettuce GeneID: Input a Lettuce gene ID."),
+                             tags$li("Ortholog of Arabidopsis Genes: Provide an Arabidopsis gene ID to find Lettuce ortholog."),
+                             tags$li("Genes with GO-term: Enter a GO term for associated Lettuce genes."),
+                             tags$li("Genes with Protein Domain: Search genes by protein domains.")
+                           )),
+                   tags$li("Specify genes or criteria based on your selected gene method."),
+                   tags$li("Adjust filters or settings for your selected experiment."),
+                   tags$li("Click 'Generate Results' to view plots and data tables.")
+                 )
+        )
+      )
+
+      ,
 
       # Display the appropriate output based on the selected experiment after the button is clicked
       # Lesion Size Correlation
@@ -150,6 +187,13 @@ server <- function(input, output, session) {
     if (input$experiment == "Lesion Size Correlation") {
 
       tagList(
+        selectInput("signif_cor_only", "Do you wish to return significant lesion size correlated genes only?",
+                    choices = c('Yes'=TRUE,'No'=FALSE),
+                    selected = TRUE),
+        selectInput("DEGs_filter",
+                    "Do you wish to remove genes with confounding differential expression? See Pink et al., (2022) for more details",
+                    choices = c("Yes (Recommended)" = TRUE, "No" = FALSE),
+                    selected = TRUE),
         selectInput('lesion_cor_plotType', "Plot style",
                     choices = c('Heatmap', 'Single Panel Scatterplot', 'Multi-panel Scatterplot'),
                     selected = 'Heatmap'),
@@ -226,8 +270,9 @@ server <- function(input, output, session) {
                       value = 2),
           selectInput('lesion_corr_facet_scales',
                       'Plot options: Y-axis scale',
-                      choices = c('Consistent Y-axis across all genes', 'Gene-specific Y-axis'),
-                      selected = 'Consistent Y-axis across all genes')
+                      choices = c('Consistent Y-axis across all genes'='free_x',
+                                  'Gene-specific Y-axis'='free'),
+                      selected = 'free_x')
         )}
     }}else if(input$experiment=="Time-Series Expression"){
       if(isTruthy(input$time_series_plot_type)){
@@ -315,6 +360,8 @@ server <- function(input, output, session) {
       args <- c(input_list(),
                 list(fungi = input_fungi,
                      top_n_by_lesion_cor = as.integer(input$topn_by_lesion_cor),
+                     signif_cor_only = input$signif_cor_only,
+                     DEGs_filtered= input$DEGs_filter,
                      return_heatmap = ifelse(input$lesion_cor_plotType =='Heatmap', TRUE, FALSE),
                      facet_title_size=input$lesion_corr_facet_title_size) )
       if(isTruthy(input$lesion_cor_plotType)){
@@ -322,8 +369,7 @@ server <- function(input, output, session) {
         args <- c(args,
                   list(single_panel=FALSE,
                        facet_rows=input$lesion_corr_facet_nrows,
-                       facet_scales = ifelse(input$lesion_corr_facet_scales=='Gene-specific Y-axis',
-                                             'free', 'free_x')))
+                       facet_scales = input$lesion_corr_facet_scales))
         }
         }
 

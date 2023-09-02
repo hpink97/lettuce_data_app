@@ -3,7 +3,7 @@ library(DBI)
 library(RSQLite)
 
 # Set the path to the SQLite database file
-sqlite_path <- "G:/Shared drives/Denby Lab Team Drive/Lab members/Harry/lettuce_data_shiny_app/sql_db/lettuce_data.sqlite"
+sqlite_path <- "sql_db/lettuce_data.sqlite"
 
 # Function to establish a connection to the SQLite database
 db_connect <- function(db_path = sqlite_path){
