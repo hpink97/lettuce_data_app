@@ -19,15 +19,25 @@ ui <- fluidPage(
 
   titlePanel("Lettuce Data Explorer"),
 
+  # Add the citations banner at the top of the app
+  tags$div(
+    style = "border: 2px solid #ddd; padding: 10px; background-color: #f9f9f9; font-size: 16px;",  # Styles for the citation box
+    tags$p(
+      "Citations:",
+      tags$br(),
+      HTML("<a href='https://doi.org/10.1007/s00122-022-04129-5'>Pink, H., Talbot, A., Graceson, A. et al. Identification of genetic loci in lettuce mediating quantitative resistance to fungal pathogens. Theor Appl Genet, 135, 2481–2500 (2022).</a>"),
+      tags$br(),
+      HTML("<a href='https://doi.org/10.1101/2023.07.19.549542'>Pink, H., Talbot, A., Carter, R.,. et al. Identification of Lactuca sativa transcription factors impacting resistance to Botrytis cinerea through predictive network inference. bioRxiv (2023).</a>")
+    )
+  ),
+
   sidebarLayout(
     sidebarPanel(
-      selectInput("experiment", "Choose an Experiment",
-                  choices = c( "Time-Series Expression", "Gene Regulatory Network Analysis","Lesion Size Correlation"),
-                  selected = "Time-Series Expression"),
+      selectInput("experiment", "Select a dataset to analyse",
+                  choices = c( "Time-Series Expression", "Gene Regulatory Network Analysis","Lesion Size Correlation")),
 
       selectInput("geneSelectionMethod", "Gene selection method",
-                  choices = c("Lettuce GeneID", "Ortholog of Arabidopsis Genes", "Genes with GO-term", "Genes with Protein Domain"),
-                  selected = "Genes with GO-term"),
+                  choices = c("Lettuce GeneID", "Ortholog of Arabidopsis Genes", "Genes with GO-term", "Genes with Protein Domain")),
 
       # Dynamic Default for Text Input based on Gene Selection Method
       uiOutput("geneInputUI"),
@@ -45,58 +55,52 @@ ui <- fluidPage(
       # Display information if button is not clicked
       conditionalPanel(
         condition = "input.btn_generate == 0",
-
         tags$div(style = "font-size: 18px; line-height: 1.6;",   # This applies the styling to the entire div content
 
-                 tags$h3("Welcome to Lettuce Data Explorer!"),
+                 tags$h3("Welcome to Lettuce Data Explorer!", style="font-weight: bold;"),
                  tags$p("This tool simplifies the exploration of our lettuce transcriptomic datasets. Quickly find lettuce genes using Arabidopsis symbols/IDs, GO terms, or protein domains, allowing you to focus on your genes of interest."),
 
-                 tags$h4("Instructions:"),
-
+                 tags$h4("Step 1: Select a dataset to analyse", style="font-weight: bold;"),
                  tags$ul(
-                   tags$li("Select an experiment to analyse Lettuce data:",
+                   tags$li(strong("Time-series expression:"),
+                           "Explore dynamic expression profiles of lettuce gene in responses to ", HTML("<i>Botrytis cinerea</i>"), " and ",
+                           HTML("<i>Sclerotinia sclerotioruim</i>"), "infection."),
+                   tags$li(strong("Gene Regulatory Network Analysis:"),
+                           "Explore predicted transcriptional regulation events during lettuce-necrotroph infection."),
+                   tags$li(strong("Lesion Size Correlation:"), "Examine gene expression's correlation with susceptibility to pathogens (lesion size).")
+                 ),
 
-                           tags$ul(
-                             tags$li(
-                               strong("Time-series expression:"),
-                               "Monitor lettuce gene responses to ", HTML("<i>Botrytis cinerea</i>"), " and ", HTML("<i>Sclerotinia sclerotioruim</i>"), ". View gene expression profiles."
-                             ),
-                             tags$li(
-                               strong("Gene Regulatory Network Analysis:"),
-                               "Explore transcriptional shifts during necrotrophic infections. View regulators or edges for selected genes."
-                             ),
-                             tags$li(
-                               strong("Lesion Size Correlation:"),
-                               "Examine gene expression's correlation with susceptibility (lesion size) to pathogens."
-                             )
-                           )),
+                 tags$h4("Step 2: Select your genes of interest using one of the following selection criteria", style="font-weight: bold;"),
+                 tags$ul(
+                   tags$li(strong("Lettuce GeneID:"), "Input Lettuce gene ID(s)."),
+                   tags$li(strong("Orthologues of Arabidopsis Genes:"), "Provide an Arabidopsis gene ID to find Lettuce orthologues."),
+                   tags$li(strong("Genes with GO-term:"), "Enter a GO term for associated Lettuce genes."),
+                   tags$li(strong("Genes with Protein Domain:"), "Search genes that contain a specified protein domain.")
+                 ),
+                 tags$h4("Step 3: Dataset-specific options", style="font-weight: bold;"),
+                 tags$ul(
+                   tags$li("Dataset-specific gene selection criteria, such as DEGs only or lesion-correlated only."),
+                   tags$li("Plot customisation options")
+                 ),
 
-                   tags$li("Choose a gene selection method:",
-                           tags$ul(
-                             tags$li("Lettuce GeneID: Input a Lettuce gene ID."),
-                             tags$li("Ortholog of Arabidopsis Genes: Provide an Arabidopsis gene ID to find Lettuce ortholog."),
-                             tags$li("Genes with GO-term: Enter a GO term for associated Lettuce genes."),
-                             tags$li("Genes with Protein Domain: Search genes by protein domains.")
-                           )),
-                   tags$li("Specify genes or criteria based on your selected gene method."),
-                   tags$li("Adjust filters or settings for your selected experiment."),
-                   tags$li("Click 'Generate Results' to view plots and data tables.")
-                 )
+
+                 tags$h4("Step 4: Click 'Generate Results'", style="font-weight: bold;")
         )
-      )
-
-      ,
-
-      # Display the appropriate output based on the selected experiment after the button is clicked
-      # Lesion Size Correlation
+      ),
       fluidRow(
-        column(6,
+        column(4,
                conditionalPanel(
                  condition = "(input.experiment == 'Lesion Size Correlation' || input.experiment == 'Time-Series Expression') && input.btn_generate != 0",
                  downloadButton('downloadData', 'Download Expression Data')
                )
         ),
-        column(6,
+        column(4,
+               conditionalPanel(
+                 condition = "(input.experiment == 'Lesion Size Correlation' || input.experiment == 'Time-Series Expression') && input.btn_generate != 0",
+                 actionButton("showDownloadOptions", "Download Plot")
+               )
+        ),
+        column(4,
                conditionalPanel(
                  condition = "input.experiment == 'Lesion Size Correlation' &&  input.btn_generate != 0",
                  downloadButton('downloadLesionSizeData', 'Download Lesion Size Data')
@@ -107,48 +111,32 @@ ui <- fluidPage(
         condition = "input.experiment == 'Lesion Size Correlation' &&  input.btn_generate != 0",
         withSpinner(plotOutput("lesionCorrPlot"))
       ),
-      # conditionalPanel(
-      #   condition = "input.experiment == 'Lesion Size Correlation' && input.btn_generate != 0",
-      #   withSpinner(DTOutput("lesionCorrTable"))
-      # ),
-
-      # Time-Series Expression
       conditionalPanel(
         condition = "input.experiment == 'Time-Series Expression' && input.btn_generate != 0",
         withSpinner(plotOutput("timeSeriesPlot"))
       ),
-      # conditionalPanel(
-      #   condition = "input.experiment == 'Time-Series Expression' && input.btn_generate != 0",
-      #   withSpinner(DTOutput("timeSeriesTable"))
-      # ),
-
-      # Gene Regulatory Network Analysis
       conditionalPanel(
         condition = "input.experiment == 'Gene Regulatory Network Analysis' && input.btn_generate != 0",
         withSpinner(DTOutput("mainTable"))
       )
     )
-  ),  # This closes the sidebarLayout
-
-  # Footer with styled citations
-  tags$footer(
-    tags$hr(),
-    tags$div(
-      style = "border: 2px solid #ddd; padding: 10px; background-color: #f9f9f9; font-size: 16px;",  # Styles for the citation box
-      tags$p(
-        "Citations:",
-        tags$br(),
-        HTML("<a href='https://doi.org/10.1007/s00122-022-04129-5'>Pink, H., Talbot, A., Graceson, A. et al. Identification of genetic loci in lettuce mediating quantitative resistance to fungal pathogens. Theor Appl Genet, 135, 2481–2500 (2022).</a>"),
-        tags$br(),
-        HTML("<a href='https://doi.org/10.1101/2023.07.19.549542'>Pink, H., Talbot, A., Carter, R.,. et al. Identification of Lactuca sativa transcription factors impacting resistance to Botrytis cinerea through predictive network inference. bioRxiv (2023).</a>")
-      )
-    )
-  )
+  )  # This closes the sidebarLayout
 )
 
 
 
 server <- function(input, output, session) {
+
+  #initilaise reactive values
+  plotDownloadUserChoices <- reactiveValues(fileType = NULL, imgWidth = NULL, imgHeight = NULL, imgResolution = NULL)
+
+  ##initialize value for the plot
+
+  make_plot <- reactiveVal()
+  plot_data <- reactiveVal()
+  lesion_size_data <- reactiveVal()
+
+
 
   # Render the appropriate default text based on gene selection method
   output$geneInputUI <- renderUI({
@@ -229,9 +217,7 @@ server <- function(input, output, session) {
           selectInput('time_series_plot_type', 'Plot options: Plot style',
                       choices = c('Heatmap', 'Single Panel Line Plot', 'Multi Panel Line Plot'),
                       selected = 'Heatmap'),
-          selectInput('include_mock','Plot options: Do you wish to include mock gene expression',
-                      choices = c('Yes','No'),
-                      selected = 'Yes'),
+
           sliderInput('time_series_label_size','Plot option: gene label size',
                       min = 7,
                       max = 20,
@@ -278,6 +264,9 @@ server <- function(input, output, session) {
       if(isTruthy(input$time_series_plot_type)){
         if(input$time_series_plot_type =='Multi Panel Line Plot'){
           tagList(
+            selectInput('include_mock','Plot options: Do you wish to include mock gene expression',
+                        choices = c('Yes','No'),
+                        selected = 'Yes'),
             sliderInput("time_series_facet_nrows",
                         "Plot options: Number of grid rows",
                         min = 1,
@@ -287,7 +276,12 @@ server <- function(input, output, session) {
                         'Plot options: Y-axis scale',
                         choices = c('Consistent Y-axis across all genes', 'Gene-specific Y-axis'),
                         selected = 'Consistent Y-axis across all genes')
-          )}
+          )}else if(input$time_series_plot_type !='Single Panel Line Plot'){
+            tagList(
+              selectInput('include_mock','Plot options: Do you wish to include mock gene expression',
+                                choices = c('Yes','No'),
+                                selected = 'Yes'))
+          }
         }
     }else if(input$experiment == "Gene Regulatory Network Analysis"){
 
@@ -315,11 +309,6 @@ server <- function(input, output, session) {
   })
 
 
-  ##initialize value for the plot
-
-  make_plot <- reactiveVal()
-  plot_data <- reactiveVal()
-  lesion_size_data <- reactiveVal()
 
   observeEvent(input$btn_generate, {
     # Update the table data when button is clicked
@@ -477,7 +466,7 @@ server <- function(input, output, session) {
 
   output$downloadData <- downloadHandler(
     filename = function() {
-      paste(gsub(' ','-',tolower(input$experiment)),'-expression-data-', Sys.Date(), '.csv', sep='')
+      paste(gsub(' ','-',tolower(input$experiment)),'-data-', Sys.Date(), '.csv', sep='')
     },
     content = function(file) {
       write.csv(plot_data(), file)
@@ -492,6 +481,59 @@ server <- function(input, output, session) {
       write.csv(lesion_size_data(), file)
     }
   )
+
+
+  observeEvent(input$showDownloadOptions, {
+    # Show modal dialog when the actionButton is clicked
+    showModal(modalDialog(
+      title = "Download Options",
+      radioButtons("fileType", "Choose File Type", choices = c("png", "tiff", "pdf", "RDATA")),
+      numericInput("imgWidth", "Image Width", value = 800, min = 300, max = 5000),
+      numericInput("imgHeight", "Image Height", value = 600, min = 200, max = 5000),
+      numericInput("imgResolution", "Resolution (DPI)", value = 300, min = 72, max = 1200),
+      footer = tagList(
+        downloadButton(outputId = "save_plot", "Save Plot"),
+        modalButton("Cancel")
+      ),
+      easyClose = TRUE
+    ))
+  })
+
+  output$save_plot <- downloadHandler(
+    filename = function() {
+      # Store user's modal choices in the reactiveValues
+      plotDownloadUserChoices$fileType <- input$fileType
+      plotDownloadUserChoices$imgWidth <- input$imgWidth
+      plotDownloadUserChoices$imgHeight <- input$imgHeight
+      plotDownloadUserChoices$imgResolution <- input$imgResolution
+
+      fname <- paste(gsub(' ','-',tolower(input$experiment)),"-plot-", Sys.Date(), ".", plotDownloadUserChoices$fileType, sep = "")
+      print(paste("Filename:", fname)) # for debugging
+      return(fname)
+    },
+    content = function(file) {
+      if (plotDownloadUserChoices$fileType == "png") {
+        png(file, width = plotDownloadUserChoices$imgWidth, height = plotDownloadUserChoices$imgHeight, res = plotDownloadUserChoices$imgResolution)
+        print(make_plot())
+        dev.off()
+      } else if (plotDownloadUserChoices$fileType == "tiff") {
+        tiff(file, width = plotDownloadUserChoices$imgWidth, height = plotDownloadUserChoices$imgHeight, res = plotDownloadUserChoices$imgResolution)
+        print(make_plot())
+        dev.off()
+      } else if (plotDownloadUserChoices$fileType == "pdf") {
+        pdf(file, width = plotDownloadUserChoices$imgWidth/100, height = plotDownloadUserChoices$imgHeight/100)  # PDF uses inches
+        print(make_plot())
+        dev.off()
+      } else if (plotDownloadUserChoices$fileType == "RDATA") {
+        saveRDS(make_plot(), file)
+      }
+
+      # Close the modal after the user chooses options
+      removeModal()
+    }
+  )
+
+
 
 
 
