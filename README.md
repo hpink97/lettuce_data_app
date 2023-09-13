@@ -4,7 +4,9 @@
 
 Welcome to the Lettuce Data Explorer, a Shiny application for exploring lettuce transcriptomic datasets after infection with necrotrophic pathogens (*Botrytis cinerea* and *Sclerotinia sclerotiorum*) and gene regulatory network inferred from them!
 
-This application is hosted on shinyapps.io and is available [here](https://hpink97.shinyapps.io/Lettuce-Data/).
+This application is hosted on shinyapps.io;
+## 🔗 **[Visit the Lettuce Data Explorer on Shinyapps.io](https://hpink97.shinyapps.io/Lettuce-Data/)** 🔗
+
 
 ## Overview
 The Lettuce Data Explorer simplifies the exploration of lettuce transcriptomic datasets. It empowers users to swiftly identify lettuce genes using different selection criteria, such as Arabidopsis symbols/IDs, GO terms, protein domains, and more.
