@@ -118,7 +118,21 @@ calculate_confidence_interval <- function(row) {
 }
 
 
-# Function to get time-series expression data for specified genes and fungi
+##----------------------------------------------------------------------------------------------------------------------------
+# This function retrieves the time-series expression data for specified genes and fungi from a database.
+#
+# Parameters:
+# - genes: Vector of gene IDs to be queried. Default values are provided as examples.
+# - fungi: Vector of fungi names. Default values are provided as examples.
+# - include_raw_points: Boolean flag to indicate whether raw data points should be included.
+# - include_mock: Boolean flag to determine if mock treatments should be included in the results.
+# - include_conf_intervals: Boolean flag to determine if confidence intervals should be computed for the results.
+# - ts_DEGs_only: Boolean flag to filter only the differentially expressed genes (DEGs) in the time series.
+# - up_down_only: String indicating which type of genes to retrieve based on their expression direction (upregulated, downregulated, or both).
+#
+# Returns:
+# - A data frame with the expression data for the specified genes and fungi.
+#
 get_timeseries_exp <- function(genes = c('Lsat_1_v5_gn_3_121961', 'Lsat_1_v5_gn_9_69201', 'invalid_id'),
                                fungi = c('Bc', 'Ss', 'invalid_fungi'),
                                include_raw_points = TRUE,
@@ -127,19 +141,25 @@ get_timeseries_exp <- function(genes = c('Lsat_1_v5_gn_3_121961', 'Lsat_1_v5_gn_
                                ts_DEGs_only = FALSE,
                                up_down_only = 'both'
 ) {
-  # Process fungi names and filter allowed ones
+  # Process fungi names to standardize them and filter out valid fungi.
   fungi = tolower(fungi) %>% gsub(' ', '', .) %>% gsub('\\.|_', '', .)
   fungi <- ifelse(fungi[fungi %in% allowed_fungi] %in% allowed_sclero, 'Scl', 'Bot')
 
-  # Get the formatted query for valid genes
+  # Retrieve a formatted query string for valid genes.
   genes_query = get_genes_query(genes)
 
-  # Check if there are valid fungi and genes
+  # Check if there are valid fungi and genes. If not, return NULL.
   if (length(fungi) < 1 | is.null(genes_query)) {
     return(NULL)
   }
 
-  # Construct the SQL query based on input parameters
+  ## ensure that up_down_only length ==1
+  if(length(up_down_only)>1){
+    up_down_only <- up_down_only[1]
+  }
+
+  # Construct the SQL query based on input parameters.
+  # SELECT clause will determine which columns will be included in the result set.
   SELECT <- paste0("SELECT GeneID, Fungi, Treatment, hpi, ",
                    ifelse(include_raw_points, "rep1_log2 as rep1, rep2_log2 as rep2, rep3_log2 as rep3, ", ""),
                    "(COALESCE(rep1_log2, 0) + COALESCE(rep2_log2, 0) + COALESCE(rep3_log2, 0)) /
@@ -147,13 +167,20 @@ get_timeseries_exp <- function(genes = c('Lsat_1_v5_gn_3_121961', 'Lsat_1_v5_gn_
                    CASE WHEN rep2_log2 IS NOT NULL THEN 1 ELSE 0 END +
                    CASE WHEN rep3_log2 IS NOT NULL THEN 1 ELSE 0 END) AS mean_expr")
 
+  # WHERE clause will filter out the records based on the input parameters.
   WHERE <- paste0(" WHERE GeneID IN ", genes_query)
+
+  #if mock data not needed, query just infected data
   if (!include_mock) {
     WHERE <- paste0(WHERE, " AND Treatment = 'Infected'")
   }
+
+  ## query expression in response to specific fungi selected by user input
   if (length(fungi) == 1) {
     WHERE <- paste0(WHERE, " AND Fungi = '", fungi, "'")
   }
+
+  ## select
   up_down_only <- tolower(trimws(up_down_only))
   if (ts_DEGs_only|up_down_only %in% c('up','down')) {
     if(up_down_only %in% c('up','down')){
@@ -164,11 +191,13 @@ get_timeseries_exp <- function(genes = c('Lsat_1_v5_gn_3_121961', 'Lsat_1_v5_gn_
     WHERE <- paste0(WHERE, " AND GeneID IN (SELECT GeneID FROM timeseries_overlap_degs",subquery_where,")")
   }
 
+  # Concatenate SELECT and WHERE clauses to form the complete query.
   my_query <- paste0(SELECT, " FROM timeseries", WHERE)
 
+  # Print the query for debugging purposes.
   print(my_query)
 
-  # Execute the SQL query and return data frame
+  # Execute the SQL query.
   exp <- db_query(my_query)
 
   # Add confidence intervals if required
@@ -182,63 +211,91 @@ get_timeseries_exp <- function(genes = c('Lsat_1_v5_gn_3_121961', 'Lsat_1_v5_gn_
 }
 
 
+#------------------------------------------------------------------------------------------------------------------------
+
+# This function converts a given Gene Ontology (GO) term description to its corresponding GO ID.
+#
+# Parameters:
+# - description: A string representing the GO term description.
+#
+# Returns:
+# - The GO ID corresponding to the provided description.
+#
 GO_descrip_2_ID <- function(description) {
+  # Convert description to lowercase and trim white spaces.
   description <- tolower(trimws(description))
+
+  # Use AnnotationDbi to query the GO database for the given description and retrieve the corresponding GO ID.
   res <- AnnotationDbi::select(GO.db::GO.db,
                                keys=description,
                                keytype="TERM",
                                columns=c("GOID"))
+
+  # Return the first GO ID from the results.
   return(res$GOID[1])
 }
 
 
-# Function to retrieve lettuce genes associated with a given Gene Ontology (GO) term
+
+#------------------------------------------------------------------------------------------------------------------
+
+# This function retrieves lettuce genes associated with a given GO term using the TAIR database.
+#
+# Parameters:
+# - go_id: A string representing the GO ID or the GO term description.
+# - subset_lettuce_ids: A vector of lettuce gene IDs to limit the results. If NULL, no subsetting is done.
+# - ts_degs_only: A boolean flag indicating if only differentially expressed genes should be returned.
+# - include_gene_names: A boolean flag indicating if gene names should be included in the result.
+#
+# Returns:
+# - A data frame containing lettuce genes associated with the given GO term.
+#
 get_GO_genes <- function(go_id = 'GO:0009723',
                          subset_lettuce_ids = NULL,
                          ts_degs_only = FALSE,
                          include_gene_names =TRUE
 ) {
 
-  # Check if the input is a GO ID or a description using regex
+  # Check if the provided go_id is a GO ID format using regex.
   is_go_id <- grepl("^GO:\\d{7}$", go_id)
 
-  # If it's a description, get its GO ID
+  # If the provided input is a GO description, convert it to its corresponding GO ID.
   if (!is_go_id) {
     go_id <- GO_descrip_2_ID(go_id)
 
-    # Handle invalid descriptions (i.e., when the returned GO ID is NULL or has no rows)
+    # Handle cases where an invalid GO description is provided (i.e., when the GO ID doesn't match the expected format).
     if (!grepl("^GO:\\d{7}$", go_id)) {
       stop("Invalid GO description provided.")
     }
   }
 
-
-
-  # Retrieve AGI codes associated with the GO term from the TAIR database
+  # Retrieve Arabidopsis gene IDs (AGI codes) associated with the provided GO term from the TAIR database.
   At_genes_w_GO <- AnnotationDbi::select(org.At.tair.db::org.At.tair.db,
                                          keys = go_id,
                                          columns = c("TAIR"),
                                          keytype = "GO")
 
+  # If fewer than 2 genes are retrieved, return NULL (indicating no associated genes found).
   if (nrow(At_genes_w_GO) < 2) {
     return(NULL)
   }
 
+  # Construct the WHERE clause for the SQL query based on the provided parameters.
   WHERE <- paste('WHERE AGI IN', get_genes_query(At_genes_w_GO$TAIR))
 
+  # If only differentially expressed genes should be included.
   if (ts_degs_only) {
     WHERE <- paste0(WHERE, " AND GeneID IN (SELECT GeneID FROM timeseries_overlap_degs)")
-  } else if (!is.null(subset_lettuce_ids)) {
+  }
+  # If a subset of lettuce gene IDs is provided.
+  else if (!is.null(subset_lettuce_ids)) {
     let_genes_query <- get_genes_query(subset_lettuce_ids)
     if (!is.null(let_genes_query)) {
       WHERE <- paste0(WHERE, " AND GeneID IN ", let_genes_query)
     }
   }
 
-
-
-  # Construct the SQL query and retrieve lettuce genes with the GO term
-
+  # Construct the SQL query based on the constructed WHERE clause and retrieve lettuce genes associated with the provided GO term.
   query <- paste0("SELECT GeneID",
                   ifelse(include_gene_names,
                          paste0(", CASE WHEN (At_ShortName IS NULL OR At_ShortName LIKE 'AT%G%') THEN GeneID ",
@@ -246,13 +303,96 @@ get_GO_genes <- function(go_id = 'GO:0009723',
                          ""),
                   " FROM gene_annotations ", WHERE)
 
+  # Execute the SQL query and store the result in Ls_genes_w_GO.
   Ls_genes_w_GO <- db_query(query)
 
+  # Return the resulting data frame.
   return(Ls_genes_w_GO)
 }
 
 
-# Function to retrieve lettuce genes associated with a given protein domain
+
+#------------------------------------------------------------------------------------------------------------------------
+
+# This function retrieves lettuce orthologs of given Arabidopsis genes based on either AGI code or gene symbol.
+#
+# Parameters:
+# - arabidopsis_genes: A character vector containing Arabidopsis AGI codes or gene symbols.
+# - subset_lettuce_ids: A vector of lettuce gene IDs to limit the results. If NULL, no subsetting is done. (unused in this function)
+# - ts_degs_only: A boolean flag indicating if only differentially expressed genes should be returned. (unused in this function)
+# - include_gene_name: A boolean flag indicating if gene names should be included in the result.
+#
+# Returns:
+# - A data frame containing lettuce genes that are orthologs of the provided Arabidopsis genes.
+#
+get_orthologs <- function(arabidopsis_genes,
+                          subset_lettuce_ids = NULL,
+                          ts_degs_only = FALSE,
+                          include_gene_name = FALSE
+) {
+
+  # Convert the provided Arabidopsis genes to uppercase and trim white spaces.
+  arabidopsis_genes <- toupper(trimws(arabidopsis_genes))
+
+  # Check if the provided genes are in the AGI code format.
+  is_AGI =  grepl('AT[0-9]G[0-9]+', arabidopsis_genes)
+
+  # Filter out the genes that are in AGI code format.
+  AGI <- arabidopsis_genes[is_AGI]
+
+  # If any gene symbols are provided (i.e., not in AGI format), convert them to AGI using the TAIR database.
+  if (sum(!is_AGI) >= 1) {
+    tair_code <- tryCatch({
+      AnnotationDbi::select(org.At.tair.db::org.At.tair.db,
+                            keys = arabidopsis_genes[!is_AGI],
+                            keytype = "SYMBOL",
+                            columns = "TAIR")$TAIR
+    }, error = function(e) {
+      # If an error occurs during the database query, display an error message and return an empty string.
+      message("Error occurred while querying the TAIR database.")
+      return('')
+    })
+
+    # Combine the original AGI codes with the AGI codes retrieved from the database.
+    AGI <- c(AGI, tair_code)
+  }
+
+  # If gene names should be included in the result, construct the respective SQL query part.
+  gene_name_query = ifelse(include_gene_name,
+                           ",
+  CASE
+    WHEN (At_ShortName IS NULL OR At_ShortName LIKE 'AT%G%') THEN GeneID
+    ELSE 'Ls' || At_ShortName
+  END AS name","")
+
+  # Construct the complete SQL query to retrieve lettuce orthologs based on the provided AGI codes.
+  query <- paste0("SELECT GeneID",gene_name_query,
+                  " FROM gene_annotations WHERE AGI IN ",
+                  get_genes_query(AGI),
+                  ifelse(include_gene_name, " ORDER BY name",""))
+
+  # Execute the SQL query and store the result.
+  Ls_orthologs <- db_query(query)
+
+  # Return the resulting data frame.
+  return(Ls_orthologs)
+}
+
+
+#------------------------------------------------------------------------------------------------------------------------
+
+# This function retrieves lettuce genes associated with a specified protein domain.
+#
+# Parameters:
+# - domain_id: The protein domain ID (default is 'PF00067').
+# - domain_desc: A description of the protein domain. If provided, it takes precedence over domain_id.
+# - subset_lettuce_ids: A vector of lettuce gene IDs to limit the results. If NULL, no subsetting is done.
+# - ts_degs_only: A boolean flag indicating if only differentially expressed genes should be returned.
+# - include_gene_name: A boolean flag indicating if gene names should be included in the result.
+#
+# Returns:
+# - A data frame containing lettuce genes associated with the specified protein domain.
+#
 get_genes_w_domain <- function(domain_id = 'PF00067',
                                domain_desc = NULL,
                                subset_lettuce_ids = NULL,
@@ -260,22 +400,28 @@ get_genes_w_domain <- function(domain_id = 'PF00067',
                                include_gene_name = TRUE
 ) {
   # Construct the WHERE clause for the SQL query based on input parameters
+
+  # If a domain description is provided, use it in the WHERE clause with a LIKE statement to find matches.
   if (!is.null(domain_desc)) {
     WHERE = paste("WHERE LOWER(da.description) LIKE", sprintf("'%%%s%%'", tolower(domain_desc)))
   } else {
+    # Otherwise, use the provided domain ID to filter the results.
     WHERE = paste0("WHERE da.id =", "'", domain_id, "'")
   }
 
+  # If only differentially expressed genes should be included, add this filter to the WHERE clause.
   if (ts_degs_only) {
     WHERE <- paste0(WHERE, " AND da.GeneID IN (SELECT GeneID FROM timeseries_overlap_degs)")
-  } else if (!is.null(subset_lettuce_ids)) {
+  }
+  # If a specific subset of lettuce genes is provided, add this filter to the WHERE clause.
+  else if (!is.null(subset_lettuce_ids)) {
     let_genes_query <- get_genes_query(subset_lettuce_ids)
     if (!is.null(let_genes_query)) {
       WHERE <- paste0(WHERE, " AND da.GeneID IN ", let_genes_query)
     }
   }
 
-  # Construct the SQL query based on whether to include gene names or not
+  # Construct the SQL query. If gene names should be included in the result, create a JOIN to the gene_annotations table.
   if (include_gene_name) {
     query <- paste("SELECT DISTINCT da.GeneID,",
                    "CASE WHEN (ga.At_ShortName IS NULL OR ga.At_ShortName LIKE 'AT%G%') THEN da.GeneID",
@@ -290,83 +436,74 @@ get_genes_w_domain <- function(domain_id = 'PF00067',
   # Print the generated query (optional)
   print(query)
 
-  # Execute the SQL query and return data frame
+  # Execute the SQL query and store the result.
   Ls_genes_w_domain <- db_query(query)
 
+  # Return the resulting data frame.
   return(Ls_genes_w_domain)
 }
 
 
-# Function to retrieve lettuce genes that are orthologs of a given AGI (Arabidopsis thaliana gene identifier)
-get_orthologs <- function(arabidopsis_genes,
-                          subset_lettuce_ids = NULL,
-                          ts_degs_only = FALSE,
-                          include_gene_name = FALSE
-
-) {
-
-  arabidopsis_genes <- toupper(trimws(arabidopsis_genes))
-
-  is_AGI =  grepl('AT[0-9]G[0-9]+', arabidopsis_genes)
-  AGI <- arabidopsis_genes[is_AGI]
 
 
+#------------------------------------------------------------------------------------------------------------------------
 
-  # If shortname is provided, try to convert it to AGI using TAIR database
-  if (sum(!is_AGI)>=1) {
-    tair_code <- tryCatch({
-      AnnotationDbi::select(org.At.tair.db::org.At.tair.db,
-                            keys = arabidopsis_genes[!is_AGI],
-                            keytype = "SYMBOL",
-                            columns = "TAIR")$TAIR
-    }, error = function(e) {
-      # If an error occurs, return an empty data frame
-      message("Error occurred while querying the TAIR database.")
-      return('')
-    })
+# This function serves as a centralized wrapper to retrieve lettuce gene IDs based on multiple criteria.
+# It prioritizes the criteria in the following order: GeneIDs > At_orthologs > GO_id > protein_domain.
+# Only one criterion will be used per function call, based on the given priority.
+#
+# Parameters:
+# - GeneIDs: A vector of provided lettuce gene IDs.
+# - At_orthologs: A vector of Arabidopsis gene symbols or AGI codes for which lettuce orthologs are desired.
+# - GO_id: A Gene Ontology term (either ID or description) to get associated lettuce genes.
+# - protein_domain: A protein domain ID or description to get associated lettuce genes.
+#
+# Returns:
+# - A vector of lettuce gene IDs that match the given criterion.
 
-    AGI <- c(AGI, tair_code)
-  }
+get_lettuce_genes_from_inputs <- function(GeneIDs=NULL, At_orthologs=NULL, GO_id=NULL, protein_domain=NULL) {
 
-  gene_name_query = ifelse(include_gene_name,
-         ",
-  CASE
-    WHEN (At_ShortName IS NULL OR At_ShortName LIKE 'AT%G%') THEN GeneID
-    ELSE 'Ls' || At_ShortName
-  END AS name","")
-
-
-  # Construct the SQL query and retrieve lettuce genes with orthologous relationship
-  query <- paste0("SELECT GeneID",gene_name_query,
-                  " FROM gene_annotations WHERE AGI IN ",
-                  get_genes_query(AGI),
-                  ifelse(include_gene_name, " ORDER BY name",""))
-
-  Ls_orthologs <- db_query(query)
-
-  return(Ls_orthologs)
-}
-
-get_lettuce_genes_from_inputs <- function(GeneIDs, At_orthologs, GO_id, protein_domain) {
+  # If GeneIDs are provided, filter those that match the lettuce gene ID format and return them.
   if (!is.null(GeneIDs)) {
     lettuce_genes <- GeneIDs[grepl('Lsat_1_v5_gn_\\d_\\d+',GeneIDs)]
     return(GeneIDs)
-  } else if (!is.null(At_orthologs)) {
+  }
+
+  # If At_orthologs are provided, retrieve the lettuce orthologs of the provided Arabidopsis genes.
+  else if (!is.null(At_orthologs)) {
     return(get_orthologs(arabidopsis_genes = At_orthologs)$GeneID)
-  } else if (!is.null(GO_id)) {
+  }
+
+  # If a GO_id is provided, retrieve lettuce genes associated with the given GO term.
+  else if (!is.null(GO_id)) {
     return(get_GO_genes(GO_id, ts_degs_only = FALSE, include_gene_names = FALSE)$GeneID)
-  } else if (!is.null(protein_domain)) {
+  }
+
+  # If a protein_domain is provided:
+  else if (!is.null(protein_domain)) {
+    # If it matches the standard protein domain ID patterns from Pfam or Panther (PFxxxxx or PTHRxxxxx),
+    # retrieve lettuce genes associated with the given protein domain ID.
     if (grepl('PF\\d+|PTHR\\d+', protein_domain)) {
       return(get_genes_w_domain(domain_id = protein_domain,
                                 include_gene_name = FALSE, ts_degs_only = FALSE)$GeneID)
-    } else {
+    }
+    # If the provided protein_domain doesn't match the standard ID patterns,
+    # assume it's a description and retrieve genes associated with the given protein domain description.
+    else {
       return(get_genes_w_domain(domain_desc = protein_domain,
                                 include_gene_name = FALSE, ts_degs_only = FALSE)$GeneID)
     }
-  } else {
+  }
+
+  # If none of the above criteria is provided, return NULL.
+  else {
     return(NULL)
   }
 }
+
+
+
+#------------------------------------------------------------------------------------------------------------------------
 
 get_gene_names <- function(geneids, allow_dups = FALSE){
   #if no names provided, automatically generate them from annotations file
@@ -397,8 +534,6 @@ get_gene_names <- function(geneids, allow_dups = FALSE){
 
 helperFuncsLoaded = TRUE
 
-# get_GO_orthologs(go_id = 'GO:0009723', ts_degs_only=TRUE)
-#test <- get_genes_w_domain(domain_desc = 'AP2', ts_degs_only=TRUE)
-#get_orthologs(shortname = 'LBD29')
+
 
 

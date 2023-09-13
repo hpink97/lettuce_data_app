@@ -31,7 +31,7 @@ get_pred_regulators<- function(GeneIDs = NULL,
     query <- paste0(
       # Create a CTE to subset the edges first based on target_query
       "WITH SubsetEdges AS (",
-      "SELECT TF, Target, Importance ",
+      "SELECT TF, Target, Importance, wigwam_module_TF, wigwam_module_Target, Ss_DivSet_coexp_cor, Bc_DivSet_coexp_cor ",
       "FROM grn_edges ",
       "WHERE Target IN ", target_query, "),",
 
@@ -60,8 +60,11 @@ get_pred_regulators<- function(GeneIDs = NULL,
       "FROM gene_annotations WHERE GeneID IN (SELECT DISTINCT Target FROM SubsetEdges))",
 
       # Main query to fetch the required columns and join with the names CTEs
-      "SELECT e.TF, t1.TFName, e.Target, t2.TargetName, ROUND(CAST(e.Importance AS FLOAT), 4) AS Importance ",
-      "FROM SubsetEdges e ",
+      "SELECT e.TF, t1.TFName, e.Target, t2.TargetName, ROUND(CAST(e.Importance AS FLOAT), 4) AS Importance, ",
+      "e.wigwam_module_TF, e.wigwam_module_Target, ",
+      "ROUND(CAST(e.Ss_DivSet_coexp_cor AS FLOAT), 3) AS Ss_DivSet_coexp_cor, ",
+      "ROUND(CAST(e.Bc_DivSet_coexp_cor AS FLOAT), 3) AS Bc_DivSet_coexp_cor ",
+      "FROM SubsetEdges AS e ",
       "JOIN TopTFs top ON e.TF = top.TF ",
       "JOIN TFNames t1 ON e.TF = t1.GeneID ",
       "JOIN TargetNames t2 ON e.Target = t2.GeneID ",
@@ -128,6 +131,7 @@ get_pred_regulators<- function(GeneIDs = NULL,
     )
   }
 
+ # print(query)
   df <- db_query(query)
 
 
@@ -137,8 +141,8 @@ get_pred_regulators<- function(GeneIDs = NULL,
 }
 
 # #
-# get_pred_regulators(At_orthologs = c('NSL1','NSL2','RBOHD'),
-#                     min_subset_targets = 2,return_edges = TRUE)
+get_pred_regulators(At_orthologs = c('NSL1','NSL2','RBOHD'),
+                    min_subset_targets = 2,return_edges = TRUE)
 
 
 

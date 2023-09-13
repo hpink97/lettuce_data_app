@@ -3,7 +3,7 @@ require(DBI)
 require(tidyverse)
 
 setwd("G:/Shared drives/Denby Lab Team Drive/Lab members/Harry/R functions/Data")
-
+rm(list=ls())
 dir()
 
 lettuce_divset <- read_rds("Lettuce_DivSet.rds") %>%
@@ -48,8 +48,47 @@ scl_divset_corr.signif <- readxl::read_excel("G:/Shared drives/Denby Lab Team Dr
 
 
 grn.path <- "G:/Shared drives/Denby Lab Team Drive/Paper writing/Lettuce Botrytis time series paper/Analysis/Host/Botrytis-Scelrotinia-combo/OutPredict_GRNs"
-edges <- read_csv(file.path(grn.path,"high_confidence_edges.csv"))
+
 hubs <- read_csv(file.path(grn.path,"TF_outdegrees.csv"))
+
+ww_modules <- readxl::read_excel("G:/Shared drives/Denby Lab Team Drive/Paper writing/Lettuce Botrytis time series paper/Supp DataSets/TableS4-6_clusters.xlsx",sheet = 1,skip = 2) %>%
+  dplyr::select(GeneID, wigwam_module= cluster)
+
+edges <- read_csv(file.path(grn.path,"high_confidence_edges.csv")) %>%
+  merge(x=., y=ww_modules, by.x='TF',by.y='GeneID') %>%
+  merge(x=., y=ww_modules, by.x='Target',by.y='GeneID',suffixes=c('_TF','_Target'))
+
+#divset_samples <- colnames(divset_expr)[grepl('_Scl',colnames(divset_expr))]
+
+divset_expressed <- unique(divset_expr$GeneID)
+
+calculate_divset_correlation <- function(TF, target, divset_samples) {
+
+
+  if(any( !c(TF, target) %in% divset_expressed)){
+    return(NA)
+  }
+
+
+
+
+  TF_expr <- divset_expr[divset_expr$GeneID==TF, divset_samples] %>% unlist()
+  target_expr <- divset_expr[divset_expr$GeneID==target, divset_samples] %>% unlist()
+
+  both_not_NA <- !is.na(TF_expr) & !is.na(target_expr)
+
+  cor_value <- cor(TF_expr[both_not_NA], target_expr[both_not_NA], method = "pearson") # Use complete.obs to handle any NAs
+
+  return(cor_value)
+}
+
+edges$Ss_DivSet_coexp_cor <- mapply(calculate_divset_correlation,
+                                        edges$TF, edges$Target,
+                                        MoreArgs = list(divset_samples = colnames(divset_expr)[grepl('_Scl',colnames(divset_expr))]))
+
+edges$Bc_DivSet_coexp_cor <- mapply(calculate_divset_correlation,
+                                        edges$TF, edges$Target,
+                                        MoreArgs = list(divset_samples = colnames(divset_expr)[grepl('_Bot',colnames(divset_expr))]))
 
 
 prot_domain <- read_csv("G:/Shared drives/Denby Lab Team Drive/Paper writing/Lettuce Botrytis time series paper/Analysis/Host/Data/protein_domain_data/protein_domains.csv") %>%
@@ -104,4 +143,4 @@ con
 
 
 dbDisconnect(con)
-timeseries
+
