@@ -39,16 +39,24 @@ plot_timeseries_expr <- function(GeneIDs = NULL,        # Vector of gene IDs
 
 
   ##check inputs are valid
-  if(!(plot_type %in% c('heatmap','line'))){ return (ggplot())}
-  if(!(up_down_only %in% c('both','up','down'))){ return (ggplot())}
+  if(!(plot_type %in% c('heatmap','line'))){ return (blank_ggplot_w_label('unknown plot type. \n Please check inputs and try again '))}
+  if(!(up_down_only %in% c('both','up','down'))){ return (blank_ggplot_w_label('unknown input. \n Please check inputs and try again'))}
 
 
 
   # Get gene IDs based on input parameters
+  print('fetching input genes')
   input_genes <- get_lettuce_genes_from_inputs(GeneIDs, At_orthologs, GO_id, protein_domain)
 
+  print(input_genes)
+
   # Return an empty plot if no genes are found
-  if(length(input_genes) < 1){ return(ggplot())}
+  if(length(input_genes) < 1){
+    print('unable to identify valid genes')
+    p <- blank_ggplot_w_label('Unable to identify valid lettuce genes based on your input. \n Please ensure inputs are valid or reduce stringency of filtering criteria \n (e.g. do not limit to only DEGs) ')
+    return(list(data=data.frame(msg='invalid gene selection input'),
+                plot = p ))
+    }
 
   fetch_mock_data = ((include_mock &(plot_type =='heatmap' |!single_panel)) | length(input_genes)>max_n)
 
@@ -257,13 +265,3 @@ plot_timeseries_expr <- function(GeneIDs = NULL,        # Vector of gene IDs
 
 
 }
-
-
-# plot <- plot_timeseries_expr(GO_id = 'response to jasmonic acid',
-#                      #fungi = c('Bc'),
-#                      max_n = 40,facet_nrow = 2,
-#                      overlap_DEGs_only = TRUE,
-#                      plot_type='heatmap',strip.text.x_size = 9)
-#
-#
-# plot

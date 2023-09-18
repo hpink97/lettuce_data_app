@@ -32,10 +32,22 @@ plot_divset_cor <- function(GeneIDs = NULL,
 
 
 
-  genes <- get_lettuce_genes_from_inputs(GeneIDs, At_orthologs,
-                                         GO_id, protein_domain)
 
-  if(length(genes)<1){return(ggplot())}
+  print('fetching input genes')
+  genes <- get_lettuce_genes_from_inputs(GeneIDs, At_orthologs, GO_id, protein_domain)
+
+  print(genes)
+
+  # Return an empty plot if no genes are found
+  if(length(genes) < 1){
+    print('unable to identify valid genes')
+    p <- blank_ggplot_w_label('Unable to identify valid lettuce genes based on your input. \n
+                              Please ensure inputs are valid or reduce stringency of filtering criteria \n
+                              (e.g. do not limit to only DEGs) ')
+    return(list(data=data.frame(msg='invalid gene selection input'),
+                lesion_data = divset_pheno,
+                plot = p ))
+  }
 
 
 

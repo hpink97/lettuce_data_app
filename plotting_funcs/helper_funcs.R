@@ -226,13 +226,20 @@ GO_descrip_2_ID <- function(description) {
   description <- tolower(trimws(description))
 
   # Use AnnotationDbi to query the GO database for the given description and retrieve the corresponding GO ID.
-  res <- AnnotationDbi::select(GO.db::GO.db,
-                               keys=description,
-                               keytype="TERM",
-                               columns=c("GOID"))
+  res <- tryCatch({
+    AnnotationDbi::select(GO.db::GO.db,
+                          keys=description,
+                          keytype="TERM",
+                          columns=c("GOID"))$GOID[1]
+  }, error = function(e) {
+    # If an error occurs during the database query, display an error message and return an empty string.
+    message("No valid GO-term found")
+    return(NULL)
+  })
+
 
   # Return the first GO ID from the results.
-  return(res$GOID[1])
+  return(res)
 }
 
 
@@ -262,10 +269,13 @@ get_GO_genes <- function(go_id = 'GO:0009723',
   # If the provided input is a GO description, convert it to its corresponding GO ID.
   if (!is_go_id) {
     go_id <- GO_descrip_2_ID(go_id)
+    print(go_id)
 
     # Handle cases where an invalid GO description is provided (i.e., when the GO ID doesn't match the expected format).
-    if (!grepl("^GO:\\d{7}$", go_id)) {
-      stop("Invalid GO description provided.")
+    if (is.null(go_id)) {
+      return(NULL)
+    }else if(!grepl("^GO:\\d{7}$", go_id)){
+      return(NULL)
     }
   }
 
@@ -349,13 +359,20 @@ get_orthologs <- function(arabidopsis_genes,
                             columns = "TAIR")$TAIR
     }, error = function(e) {
       # If an error occurs during the database query, display an error message and return an empty string.
-      message("Error occurred while querying the TAIR database.")
-      return('')
+      message("Able to find AGI code for input TAIR database.")
+      return(NA)
     })
 
     # Combine the original AGI codes with the AGI codes retrieved from the database.
-    AGI <- c(AGI, tair_code)
+    AGI <- c(AGI, tair_code[!is.na(tair_code)])
   }
+
+
+  if(length(AGI)<1){
+    return(NULL)
+  }
+
+
 
   # If gene names should be included in the result, construct the respective SQL query part.
   gene_name_query = ifelse(include_gene_name,
@@ -439,12 +456,29 @@ get_genes_w_domain <- function(domain_id = 'PF00067',
   # Execute the SQL query and store the result.
   Ls_genes_w_domain <- db_query(query)
 
-  # Return the resulting data frame.
-  return(Ls_genes_w_domain)
+  if(nrow(Ls_genes_w_domain)>1){
+    # Return the resulting data frame.
+    return(Ls_genes_w_domain)
+  }else{
+    return(NULL)
+  }
+
+
 }
 
 
+has_column <- function(variable_name, col_name) {
 
+
+
+  if (is.data.frame(variable_name) || is_tibble(variable_name)) {
+    return(col_name %in% names(variable_name))
+  }else{
+    return(FALSE)
+  }
+
+
+}
 
 #------------------------------------------------------------------------------------------------------------------------
 
@@ -466,17 +500,24 @@ get_lettuce_genes_from_inputs <- function(GeneIDs=NULL, At_orthologs=NULL, GO_id
   # If GeneIDs are provided, filter those that match the lettuce gene ID format and return them.
   if (!is.null(GeneIDs)) {
     lettuce_genes <- GeneIDs[grepl('Lsat_1_v5_gn_\\d_\\d+',GeneIDs)]
-    return(GeneIDs)
+    if(length(lettuce_genes)<1){
+      return(NULL)
+    }
+    return(lettuce_genes)
   }
+
+
+
+
+  df <- data.frame()
 
   # If At_orthologs are provided, retrieve the lettuce orthologs of the provided Arabidopsis genes.
-  else if (!is.null(At_orthologs)) {
-    return(get_orthologs(arabidopsis_genes = At_orthologs)$GeneID)
-  }
+  if (!is.null(At_orthologs)) {
+    df <- get_orthologs(arabidopsis_genes = At_orthologs)
 
-  # If a GO_id is provided, retrieve lettuce genes associated with the given GO term.
+  }  # If a GO_id is provided, retrieve lettuce genes associated with the given GO term.
   else if (!is.null(GO_id)) {
-    return(get_GO_genes(GO_id, ts_degs_only = FALSE, include_gene_names = FALSE)$GeneID)
+    df <- get_GO_genes(GO_id, ts_degs_only = FALSE, include_gene_names = FALSE)
   }
 
   # If a protein_domain is provided:
@@ -484,21 +525,27 @@ get_lettuce_genes_from_inputs <- function(GeneIDs=NULL, At_orthologs=NULL, GO_id
     # If it matches the standard protein domain ID patterns from Pfam or Panther (PFxxxxx or PTHRxxxxx),
     # retrieve lettuce genes associated with the given protein domain ID.
     if (grepl('PF\\d+|PTHR\\d+', protein_domain)) {
-      return(get_genes_w_domain(domain_id = protein_domain,
-                                include_gene_name = FALSE, ts_degs_only = FALSE)$GeneID)
+      df <- get_genes_w_domain(domain_id = protein_domain,
+                                include_gene_name = FALSE, ts_degs_only = FALSE)
     }
     # If the provided protein_domain doesn't match the standard ID patterns,
     # assume it's a description and retrieve genes associated with the given protein domain description.
     else {
-      return(get_genes_w_domain(domain_desc = protein_domain,
-                                include_gene_name = FALSE, ts_degs_only = FALSE)$GeneID)
+      df <- get_genes_w_domain(domain_desc = protein_domain,
+                                include_gene_name = FALSE, ts_degs_only = FALSE)
     }
   }
 
-  # If none of the above criteria is provided, return NULL.
-  else {
+
+
+  if(has_column(df, 'GeneID')){
+    return(df$GeneID)
+  }else{
     return(NULL)
   }
+
+
+
 }
 
 
@@ -531,6 +578,22 @@ get_gene_names <- function(geneids, allow_dups = FALSE){
 
   return(gene_df)
 }
+
+
+
+blank_ggplot_w_label <- function(label_text, label_size=4.5) {
+
+
+  p <- ggplot() +
+    geom_text(aes(x=0.5, y=0.5, label=label_text), size=label_size) +
+    theme_void() +
+    xlim(0, 1) + ylim(0, 1)
+
+  return(p)
+}
+
+
+
 
 helperFuncsLoaded = TRUE
 

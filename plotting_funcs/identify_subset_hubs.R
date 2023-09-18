@@ -16,8 +16,19 @@ get_pred_regulators<- function(GeneIDs = NULL,
                                min_subset_targets = 5,
                                order_by_column = "FoldEnrichment"){
 
-  genes <- get_lettuce_genes_from_inputs(GeneIDs, At_orthologs,
-                                         GO_id, protein_domain)
+
+
+  print('fetching input genes')
+  genes <- get_lettuce_genes_from_inputs(GeneIDs, At_orthologs, GO_id, protein_domain)
+
+  print(genes)
+
+  # Return an empty plot if no genes are found
+  if(length(genes) < 1){
+    print('unable to identify valid genes')
+
+    return(data.frame(msg='invalid gene selection input'))
+  }
 
   target_query <- get_genes_query(genes)
 
@@ -135,14 +146,22 @@ get_pred_regulators<- function(GeneIDs = NULL,
   df <- db_query(query)
 
 
-  return(df)
+  if(nrow(df)>1){
+    return(df)
+  }else{
+    return(data.frame(msg=c('Unable to identify regulators for your inputted genes',
+                            'within your stringency criteria'),
+                      )
+           )
+  }
+
+
+
 
 
 }
 
-# #
-get_pred_regulators(At_orthologs = c('NSL1','NSL2','RBOHD'),
-                    min_subset_targets = 2,return_edges = TRUE)
+
 
 
 
