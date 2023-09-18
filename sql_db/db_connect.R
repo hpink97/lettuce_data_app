@@ -7,14 +7,14 @@ sqlite_path <- "sql_db/lettuce_data.sqlite"
 
 # Function to establish a connection to the SQLite database
 db_connect <- function(db_path = sqlite_path){
-  db_connection <- dbConnect(RSQLite::SQLite(), db_path)
+  db_connection <- DBI::dbConnect(RSQLite::SQLite(), db_path)
 
   return(db_connection)
 }
 
 # Function to disconnect from the SQLite database
 db_disconnect <- function(db_connection){
-  dbDisconnect(db_connection)
+  DBI::dbDisconnect(db_connection)
 }
 
 # Function to execute a custom SQL query and return results as a data frame

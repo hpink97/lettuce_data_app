@@ -51,8 +51,8 @@ grn.path <- "G:/Shared drives/Denby Lab Team Drive/Paper writing/Lettuce Botryti
 
 hubs <- read_csv(file.path(grn.path,"TF_outdegrees.csv"))
 
-ww_modules <- readxl::read_excel("G:/Shared drives/Denby Lab Team Drive/Paper writing/Lettuce Botrytis time series paper/Supp DataSets/TableS4-6_clusters.xlsx",sheet = 1,skip = 2) %>%
-  dplyr::select(GeneID, wigwam_module= cluster)
+ww_modules <- readxl::read_excel("G:/Shared drives/Denby Lab Team Drive/Paper writing/Lettuce Botrytis time series paper/Submitted version/Supp Dataset 5 Modules.xlsx",sheet = 1,skip = 1) %>%
+  dplyr::select(GeneID, wigwam_module= Module)
 
 edges <- read_csv(file.path(grn.path,"high_confidence_edges.csv")) %>%
   merge(x=., y=ww_modules, by.x='TF',by.y='GeneID') %>%
