@@ -3,7 +3,7 @@ library(DBI)
 library(RSQLite)
 
 # Set the path to the SQLite database file
-sqlite_path <- "mnt/shiny/lettuce_transcriptomics/lettuce_data.sqlite"
+sqlite_path <- "/mnt/shiny/lettuce_transcriptomics/lettuce_data.sqlite"
 
 # Function to establish a connection to the SQLite database
 db_connect <- function(db_path = sqlite_path){
